@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,29 +9,47 @@ import (
 	"time"
 )
 
-func writePressure(t *testing.T, dir string, resource string, avg10 string) {
+const gb = int64(1) << 30
+
+// newOptions builds a calm machine in temporary directories: no pressure, 32 GB of which 24 are free.
+func newOptions(t *testing.T) options {
 	t.Helper()
-	content := "some avg10=" + avg10 + " avg60=1.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
-	if err := os.WriteFile(filepath.Join(dir, resource), []byte(content), 0o600); err != nil {
+	t.Setenv(jobsEnv, "")
+	procDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(procDir, "pressure"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeMeminfo(t, procDir, 32, 24)
+	return options{
+		minJobs:        1,
+		maxJobs:        6,
+		pressureMaxPct: 25,
+		slotDir:        t.TempDir(),
+		stateFile:      filepath.Join(t.TempDir(), "profiles.json"),
+		cgroupDir:      t.TempDir(),
+		procDir:        procDir,
+	}
+}
+
+func writeFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestReadPressure(t *testing.T) {
-	dir := t.TempDir()
-	writePressure(t, dir, "cpu", "42.50")
-
-	pct, err := readPressure(filepath.Join(dir, "cpu"))
-
-	if err != nil || pct != 42.5 {
-		t.Fatalf("got %v, %v; want 42.5, nil", pct, err)
-	}
+func writeMeminfo(t *testing.T, procDir string, totalGB int64, availableGB int64) {
+	t.Helper()
+	writeFile(t, filepath.Join(procDir, "meminfo"),
+		fmt.Sprintf("MemTotal:       %d kB\nMemFree:        1 kB\nMemAvailable:   %d kB\n", totalGB*1024*1024, availableGB*1024*1024))
 }
 
-func TestReadPressureMissingFile(t *testing.T) {
-	if _, err := readPressure(filepath.Join(t.TempDir(), "cpu")); err == nil {
-		t.Fatal("want an error when PSI is unavailable")
-	}
+func writePressure(t *testing.T, path string, avg10 string) {
+	t.Helper()
+	writeFile(t, path, "some avg10="+avg10+" avg60=1.00 avg300=1.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")
 }
 
 func TestAcquireSharesSlotsBetweenRuns(t *testing.T) {
@@ -46,69 +65,147 @@ func TestAcquireSharesSlotsBetweenRuns(t *testing.T) {
 	}
 }
 
-func TestReserveTakesFreeSlotsWhenCalm(t *testing.T) {
-	pressureDir := t.TempDir()
-	writePressure(t, pressureDir, "cpu", "1.00")
-	opts := options{minJobs: 1, maxJobs: 6, pressureMaxPct: 25, timeout: time.Second, slotDir: t.TempDir(), pressureDir: pressureDir}
+func TestAdmitGivesAnUnknownCommandTheFreeSlotsAndTheGate(t *testing.T) {
+	opts := newOptions(t)
 
-	jobs, slots, _ := reserve(opts, 8)
+	admitted := admit(opts, "key", 8)
 
-	if jobs != 6 || len(slots) != 6 {
-		t.Fatalf("got %d jobs, %d slots; want 6, 6", jobs, len(slots))
+	if admitted.jobs != 6 || len(admitted.slots) != 6 || admitted.gate == nil {
+		t.Fatalf("got %d jobs, %d slots, gate %v; want 6, 6, held", admitted.jobs, len(admitted.slots), admitted.gate)
+	}
+	if admitted.reason != "first run of this command, measuring; 24.0 GB available" {
+		t.Fatalf("got reason %q", admitted.reason)
 	}
 }
 
-func TestReserveFallsBackToMinUnderPressure(t *testing.T) {
-	pressureDir := t.TempDir()
-	writePressure(t, pressureDir, "cpu", "1.00")
-	writePressure(t, pressureDir, "memory", "80.00")
-	opts := options{minJobs: 2, maxJobs: 6, pressureMaxPct: 25, timeout: 0, slotDir: t.TempDir(), pressureDir: pressureDir}
+func TestAdmitSizesAKnownCommandOnTheMemoryLeft(t *testing.T) {
+	opts := newOptions(t)
+	writeMeminfo(t, opts.procDir, 32, 10)
+	if err := recordRun(opts.stateFile, "key", profileRun{Jobs: 4, PeakBytes: 8 * gb}, false); err != nil {
+		t.Fatal(err)
+	}
 
-	jobs, slots, reason := reserve(opts, 8)
+	admitted := admit(opts, "key", 8)
 
-	if jobs != 2 || len(slots) != 2 || reason != "memory pressure 80% after timeout" {
-		t.Fatalf("got %d jobs, %d slots, %q", jobs, len(slots), reason)
+	// 10 GB free, 3.2 kept in reserve, 2 GB per job with a 1.18 margin: 2 jobs.
+	if admitted.jobs != 2 || len(admitted.slots) != 2 {
+		t.Fatalf("got %d jobs, %d slots; want 2, 2", admitted.jobs, len(admitted.slots))
+	}
+	if admitted.reason != "2.00 GB per job learned, 10.0 GB available" {
+		t.Fatalf("got reason %q", admitted.reason)
 	}
 }
 
-func TestReserveReadsItsOwnCgroupBeforeTheMachine(t *testing.T) {
-	cgroupDir, pressureDir := t.TempDir(), t.TempDir()
-	writePressure(t, cgroupDir, "cpu.pressure", "2.00")
-	writePressure(t, pressureDir, "cpu", "95.00")
-	opts := options{minJobs: 1, maxJobs: 4, pressureMaxPct: 25, timeout: 0, slotDir: t.TempDir(), cgroupDir: cgroupDir, pressureDir: pressureDir}
+func TestAdmitCountsTheMemoryARunningCommandHasNotLoadedYet(t *testing.T) {
+	opts := newOptions(t)
+	if err := recordRun(opts.stateFile, "heavy", profileRun{Jobs: 4, PeakBytes: 8 * gb}, false); err != nil {
+		t.Fatal(err)
+	}
+	first := admit(opts, "heavy", 12)
+	_ = first.gate.Close()
 
-	jobs, _, reason := reserve(opts, 4)
+	second := admit(opts, "heavy", 12)
 
-	if jobs != 4 || reason != "free slots" {
-		t.Fatalf("got %d jobs, %q; want 4, free slots", jobs, reason)
+	// 24 GB free: the first takes 6 jobs and announces 12 GB, so the second sizes itself on 12 GB.
+	if first.jobs != 6 || second.jobs != 3 {
+		t.Fatalf("got %d then %d jobs; want 6 then 3", first.jobs, second.jobs)
+	}
+	dropReservation(first.reservation)
+	release(append(first.slots, second.gate))
+
+	third := admit(opts, "heavy", 12)
+
+	// The second still announces 6 GB: 18 GB left, enough for the 6 jobs a run may have.
+	if third.jobs != 6 {
+		t.Fatalf("got %d jobs once the first run ended; want 6", third.jobs)
 	}
 }
 
-func TestReserveIgnoresIOPressureUnlessAsked(t *testing.T) {
-	pressureDir := t.TempDir()
-	writePressure(t, pressureDir, "io", "90.00")
-	opts := options{minJobs: 1, maxJobs: 4, pressureMaxPct: 25, timeout: 0, slotDir: t.TempDir(), pressureDir: pressureDir}
+func TestAdmitQueuesBehindARunThatIsLoading(t *testing.T) {
+	opts := newOptions(t)
+	loading := admit(opts, "first", 8)
+	defer release(append(loading.slots, loading.gate))
 
-	ignored, ignoredSlots, _ := reserve(opts, 4)
-	release(ignoredSlots)
+	queued := admit(opts, "second", 8)
+
+	if queued.jobs != 1 || queued.gate != nil || len(queued.slots) != 0 || queued.reason != "another run is loading, timeout reached" {
+		t.Fatalf("got %d jobs, gate %v, %d slots, %q", queued.jobs, queued.gate, len(queued.slots), queued.reason)
+	}
+}
+
+func TestAdmitPassesOnceTheLoadingRunOpensTheGate(t *testing.T) {
+	opts := newOptions(t)
+	opts.timeout = 5 * time.Second
+	loading := admit(opts, "first", 8)
+	defer release(loading.slots)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = loading.gate.Close()
+	}()
+
+	next := admit(opts, "second", 8)
+
+	if next.jobs != 2 || next.gate == nil {
+		t.Fatalf("got %d jobs, gate %v; want the 2 slots left and the gate", next.jobs, next.gate)
+	}
+}
+
+func TestAdmitWaitsWhenMemoryIsShort(t *testing.T) {
+	opts := newOptions(t)
+	writeMeminfo(t, opts.procDir, 32, 3)
+
+	admitted := admit(opts, "key", 8)
+
+	if admitted.jobs != 1 || admitted.gate != nil || admitted.reason != "not enough memory (3.0 GB available), timeout reached" {
+		t.Fatalf("got %d jobs, gate %v, %q", admitted.jobs, admitted.gate, admitted.reason)
+	}
+}
+
+func TestAdmitWaitsUnderPressure(t *testing.T) {
+	opts := newOptions(t)
+	writePressure(t, filepath.Join(opts.procDir, "pressure", "memory"), "80.00")
+
+	admitted := admit(opts, "key", 8)
+
+	if admitted.jobs != 1 || admitted.reason != "memory pressure 80%, timeout reached" {
+		t.Fatalf("got %d jobs, %q", admitted.jobs, admitted.reason)
+	}
+}
+
+func TestAdmitReadsItsOwnCgroupPressureBeforeTheMachine(t *testing.T) {
+	opts := newOptions(t)
+	writePressure(t, filepath.Join(opts.cgroupDir, "cpu.pressure"), "2.00")
+	writePressure(t, filepath.Join(opts.procDir, "pressure", "cpu"), "95.00")
+
+	admitted := admit(opts, "key", 8)
+
+	if admitted.jobs != 6 {
+		t.Fatalf("got %d jobs; want 6", admitted.jobs)
+	}
+}
+
+func TestAdmitIgnoresIOPressureUnlessAsked(t *testing.T) {
+	opts := newOptions(t)
+	writePressure(t, filepath.Join(opts.procDir, "pressure", "io"), "90.00")
+
+	ignored := admit(opts, "key", 8)
+	release(append(ignored.slots, ignored.gate))
 	opts.watchIO = true
-	watched, _, _ := reserve(opts, 4)
+	watched := admit(opts, "key", 8)
 
-	if ignored != 4 || watched != 1 {
-		t.Fatalf("got %d without -io, %d with; want 4, 1", ignored, watched)
+	if ignored.jobs != 6 || watched.jobs != 1 {
+		t.Fatalf("got %d without -io, %d with; want 6, 1", ignored.jobs, watched.jobs)
 	}
 }
 
-func TestReserveRunsWithMinWhenNoSlotIsFree(t *testing.T) {
-	slotDir := t.TempDir()
-	busy := acquire(slotDir, 2, 2)
-	defer release(busy)
-	opts := options{minJobs: 1, maxJobs: 2, pressureMaxPct: 25, timeout: 0, slotDir: slotDir, pressureDir: t.TempDir()}
+func TestAdmitNestedReusesTheGrantOfItsParent(t *testing.T) {
+	opts := newOptions(t)
+	t.Setenv(jobsEnv, "5")
 
-	jobs, slots, reason := reserve(opts, 2)
+	admitted := admit(opts, "key", 8)
 
-	if jobs != 1 || len(slots) != 0 || reason != "no free slot after timeout" {
-		t.Fatalf("got %d jobs, %d slots, %q", jobs, len(slots), reason)
+	if admitted.jobs != 5 || !admitted.nested || admitted.gate != nil || len(admitted.slots) != 0 {
+		t.Fatalf("got %+v", admitted)
 	}
 }
 
