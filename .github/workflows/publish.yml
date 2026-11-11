@@ -1,0 +1,51 @@
+name: Publish to npm
+
+on:
+    push:
+        tags:
+            - 'v*'
+
+permissions:
+    id-token: write
+    contents: read
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-go@v6
+              with:
+                  go-version-file: go.mod
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 24
+                  registry-url: https://registry.npmjs.org
+
+            # Trusted publishing (OIDC) requires npm >= 11.5.1
+            - run: npm install -g npm@latest
+
+            - run: test -z "$(gofmt -l .)" && go vet ./... && go test ./...
+
+            # The version is the tag: v0.2.0 publishes 0.2.0.
+            - run: sh scripts/build-npm.sh "${GITHUB_REF_NAME#v}"
+
+            # Platform packages first: the launcher depends on them at the same version.
+            - name: Publish the packages
+              run: |
+                  VERSION="${GITHUB_REF_NAME#v}"
+                  case "$VERSION" in
+                    *-beta*|*-rc*|*-alpha*) DIST_TAG=next ;;
+                    *) DIST_TAG=latest ;;
+                  esac
+                  for directory in runsema-linux-x64 runsema-linux-arm64 runsema-darwin-x64 runsema-darwin-arm64 runsema; do
+                    NAME="$(node -p "require('./dist/npm/$directory/package.json').name")"
+                    PUBLISHED="$(npm view "$NAME@$VERSION" version 2>/dev/null || echo none)"
+                    if [ "$VERSION" = "$PUBLISHED" ]; then
+                      echo "$NAME@$VERSION already published, skipping"
+                      continue
+                    fi
+                    (cd "dist/npm/$directory" && npm publish --access public --tag "$DIST_TAG")
+                  done
