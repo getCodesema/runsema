@@ -73,3 +73,17 @@ func TestTreeAnonBytesSumsTheCommandAndItsDescendants(t *testing.T) {
 		t.Fatalf("got %d; want %d", got, (1024+2048+4096)*1024)
 	}
 }
+
+func TestReadMemoryFollowsTheTightestLimitAboveTheProcess(t *testing.T) {
+	opts := newOptions(t)
+	writeFile(t, filepath.Join(opts.procDir, "self", "cgroup"), "0::/user.slice/run-1.scope\n")
+	writeFile(t, filepath.Join(opts.cgroupDir, "user.slice", "memory.max"), "max\n")
+	writeFile(t, filepath.Join(opts.cgroupDir, "user.slice", "run-1.scope", "memory.max"), "17179869184\n")
+	writeFile(t, filepath.Join(opts.cgroupDir, "user.slice", "run-1.scope", "memory.stat"), "anon 6442450944\nshmem 0\n")
+
+	got := readMemory(opts)
+
+	if got != (memory{availableBytes: 10 * gb, totalBytes: 16 * gb}) {
+		t.Fatalf("got %+v; want 10 GB available of 16", got)
+	}
+}

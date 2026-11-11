@@ -11,22 +11,47 @@ import (
 
 const bytesPerKB = 1024
 
-// readMemory is what the process may still use: the limit of its container when it has one, else the
-// machine. A zero total means it could not be read.
+// readMemory is what the process may still use: the tightest memory limit set on its cgroup or on one
+// above it (a container, a systemd scope or slice), else the machine. A zero total means it could not
+// be read.
 func readMemory(opts options) memory {
-	machine := memory{
+	mem := memory{
 		availableBytes: meminfoBytes(opts.procDir, "MemAvailable"),
 		totalBytes:     meminfoBytes(opts.procDir, "MemTotal"),
 	}
-	limitBytes, err := readInt(filepath.Join(opts.cgroupDir, "memory.max"))
-	if err != nil {
-		return machine
+	for _, dir := range ownCgroupDirs(opts) {
+		limitBytes, err := readInt(filepath.Join(dir, "memory.max"))
+		if err != nil {
+			continue
+		}
+		availableBytes := max(0, limitBytes-cgroupUsedBytes(dir))
+		if mem.totalBytes <= 0 || availableBytes < mem.availableBytes {
+			mem = memory{availableBytes: availableBytes, totalBytes: limitBytes}
+		}
 	}
-	availableBytes := max(0, limitBytes-cgroupUsedBytes(opts.cgroupDir))
-	if machine.totalBytes > 0 {
-		availableBytes = min(availableBytes, machine.availableBytes)
+	return mem
+}
+
+// ownCgroupDirs lists the cgroup of the process and every cgroup above it, nearest first. Inside a
+// container the process sees its own cgroup as the root, so the list is that single directory.
+func ownCgroupDirs(opts options) []string {
+	relative := "/"
+	if content, err := os.ReadFile(filepath.Join(opts.procDir, "self", "cgroup")); err == nil {
+		for _, line := range strings.Split(string(content), "\n") {
+			if path, found := strings.CutPrefix(line, "0::"); found {
+				relative = strings.TrimSpace(path)
+			}
+		}
 	}
-	return memory{availableBytes: availableBytes, totalBytes: limitBytes}
+	root := filepath.Clean(opts.cgroupDir)
+	var dirs []string
+	for dir := filepath.Join(root, relative); strings.HasPrefix(dir, root); dir = filepath.Dir(dir) {
+		dirs = append(dirs, dir)
+		if dir == root {
+			break
+		}
+	}
+	return dirs
 }
 
 // cgroupUsedBytes counts what cannot be reclaimed: memory.current also holds the page cache, which the

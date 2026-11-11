@@ -50,9 +50,10 @@ and no configuration.
 The command gets the terminal as is, receives the signals runsema receives, and its exit code is the
 exit code of runsema.
 
-Inside a container the CPU count is the cgroup quota (`cpu.max`), the memory is the cgroup limit
-(`memory.max`) and the pressure is the one of the container itself, so a busy neighbour does not slow
-the run down. On a host all three are machine-wide.
+Inside a container the CPU count is the cgroup quota (`cpu.max`) and the pressure is the one of the
+container itself, so a busy neighbour does not slow the run down. On a host both are machine-wide.
+Memory follows the tightest limit (`memory.max`) set on the cgroup of the run or on one above it: a
+container, a systemd scope or slice. Without any, it is the memory of the machine.
 
 ## Install
 
