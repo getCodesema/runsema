@@ -34,6 +34,10 @@ jobs:
 
             # Platform packages first: the launcher depends on them at the same version.
             - name: Publish the packages
+              # Empty once the packages trust this workflow (OIDC). Set the NPM_TOKEN secret only to publish
+              # packages that do not exist yet: npm cannot trust a workflow for a package it has never seen.
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
               run: |
                   VERSION="${GITHUB_REF_NAME#v}"
                   case "$VERSION" in
