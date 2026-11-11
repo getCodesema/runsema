@@ -28,6 +28,10 @@ jobs:
             # What npm users get: build the packages, install them in an empty project, run the command.
             - run: sh scripts/smoke-npm.sh
 
+            # The package the smoke test just built: publint catches a `bin` or a `files` list
+            # that would break on a user's install.
+            - run: npx --yes publint@0.3.25 dist/npm/runsema
+
 
     secrets:
         runs-on: ubuntu-latest

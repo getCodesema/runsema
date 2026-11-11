@@ -3,6 +3,7 @@
     "version": "0.0.0",
     "description": "Launcher that sizes a command's parallelism from the CPUs and memory free right now: shared flock slots, learned memory, Linux pressure (PSI).",
     "license": "MIT",
+    "type": "commonjs",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/getCodesema/runsema.git"
