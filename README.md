@@ -43,6 +43,14 @@ container itself, so a busy neighbour does not slow the run down. On a host both
 
 ## Install
 
+With npm, pnpm, yarn or bun (the binary ships in the package, nothing is downloaded at install):
+
+```sh
+npm install --save-dev runsema
+```
+
+With Go:
+
 ```sh
 go install github.com/getCodesema/runsema@latest
 ```
@@ -88,10 +96,15 @@ share slots only when they share this directory.
 
 ```sh
 go vet ./... && go test ./...
+sh scripts/smoke-npm.sh
 ```
 
 `main.go` holds everything: `reserve` decides the grant, `acquire` takes the slots, `readPressure`
 parses PSI, `run` starts the command. `main_test.go` covers them on temporary directories.
+
+`scripts/build-npm.sh <version>` builds the npm packages into `dist/npm`: the `runsema` launcher and one
+package per platform holding the binary. `scripts/smoke-npm.sh` installs them in an empty project and
+runs the command.
 
 ## License
 

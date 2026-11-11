@@ -1,0 +1,23 @@
+{
+    "name": "runsema",
+    "version": "0.0.0",
+    "description": "Launcher that sizes a command's parallelism from the CPUs free right now: shared flock slots plus Linux pressure (PSI).",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/getCodesema/runsema.git"
+    },
+    "bin": {
+        "runsema": "bin/runsema.js"
+    },
+    "files": [
+        "bin"
+    ],
+    "os": [
+        "linux"
+    ],
+    "optionalDependencies": {
+        "runsema-linux-arm64": "0.0.0",
+        "runsema-linux-x64": "0.0.0"
+    }
+}

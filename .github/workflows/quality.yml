@@ -25,6 +25,9 @@ jobs:
 
             - run: go test ./...
 
+            # What npm users get: build the packages, install them in an empty project, run the command.
+            - run: sh scripts/smoke-npm.sh
+
 
     secrets:
         runs-on: ubuntu-latest
