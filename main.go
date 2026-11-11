@@ -31,6 +31,9 @@ const (
 	bytesPerGB     = 1 << 30
 )
 
+// version is set at build time (scripts/build-npm.sh).
+var version = "dev"
+
 type options struct {
 	minJobs        int
 	maxJobs        int
@@ -38,6 +41,7 @@ type options struct {
 	timeout        time.Duration
 	watchIO        bool
 	quiet          bool
+	showVersion    bool
 	slotDir        string
 	stateFile      string
 	cgroupDir      string
@@ -62,6 +66,10 @@ type usage struct {
 
 func main() {
 	opts, command := parseArgs(os.Args[1:])
+	if opts.showVersion {
+		fmt.Println(version)
+		return
+	}
 	if len(command) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: runsema [flags] [--] <command> [args...]   ({jobs} in args is replaced by the grant)")
 		os.Exit(2)
@@ -91,6 +99,7 @@ func parseArgs(args []string) (options, []string) {
 	flags.DurationVar(&opts.timeout, "timeout", 5*time.Minute, "longest wait before running anyway with -min")
 	flags.BoolVar(&opts.watchIO, "io", false, "also watch IO pressure (CPU and memory are always watched)")
 	flags.BoolVar(&opts.quiet, "quiet", false, "do not print the grant on stderr")
+	flags.BoolVar(&opts.showVersion, "version", false, "print the version and exit")
 	flags.StringVar(&opts.slotDir, "dir", defaultSlotDir(), "directory of the slot and gate lock files, shared by every run")
 	flags.StringVar(&opts.stateFile, "state", "", "file remembering what each command used (default: in the user cache directory)")
 	_ = flags.Parse(args)

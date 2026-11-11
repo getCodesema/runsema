@@ -92,6 +92,7 @@ runsema -- sh -c 'make -j"$RUNSEMA_JOBS"'
 | `-timeout`  | `5m`              | Longest wait before running anyway with `-min`                   |
 | `-io`       | off               | Also watch IO pressure (CPU and memory are always watched)       |
 | `-quiet`    | off               | Do not print the grant on stderr                                 |
+| `-version`  |                   | Print the version and exit                                       |
 | `-dir`      | see below         | Directory of the lock files (slots, gate, reservations)          |
 | `-state`    | see below         | File remembering what each command used                          |
 

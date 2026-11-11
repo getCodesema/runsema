@@ -20,4 +20,6 @@ code=0
 ./node_modules/.bin/runsema -quiet -- sh -c 'exit 7' || code=$?
 [ "$code" -eq 7 ]
 
+[ "$(./node_modules/.bin/runsema -version)" = "0.0.0-smoke" ]
+
 echo "npm smoke ok: $jobs jobs granted"
