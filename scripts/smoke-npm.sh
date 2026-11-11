@@ -12,7 +12,7 @@ sh "$root/scripts/build-npm.sh" 0.0.0-smoke
 
 cd "$work"
 npm init --yes > /dev/null
-npm install --silent --no-audit --no-fund ./"$host"-0.0.0-smoke.tgz ./runsema-0.0.0-smoke.tgz
+npm install --silent --no-audit --no-fund ./codesema-"$host"-0.0.0-smoke.tgz ./codesema-runsema-0.0.0-smoke.tgz
 
 jobs="$(./node_modules/.bin/runsema -quiet -- sh -c 'echo "$RUNSEMA_JOBS"')"
 [ "$jobs" -ge 1 ]

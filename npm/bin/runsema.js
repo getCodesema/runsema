@@ -6,7 +6,7 @@
 const { spawn } = require('node:child_process');
 const { constants } = require('node:os');
 
-const platformPackage = `runsema-${process.platform}-${process.arch}`;
+const platformPackage = `@codesema/runsema-${process.platform}-${process.arch}`;
 
 let binary;
 try {

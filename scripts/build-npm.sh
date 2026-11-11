@@ -25,7 +25,7 @@ for target in linux:x64:amd64 linux:arm64:arm64 darwin:x64:amd64 darwin:arm64:ar
     cp "$root/LICENSE" "$out/$package/"
     cat > "$out/$package/package.json" <<JSON
 {
-    "name": "$package",
+    "name": "@codesema/$package",
     "version": "$version",
     "description": "The $os $cpu binary of runsema.",
     "license": "MIT",
