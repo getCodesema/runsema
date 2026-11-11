@@ -13,19 +13,21 @@ sed "s/0\.0\.0/$version/g" "$root/npm/package.json" > "$out/runsema/package.json
 cp "$root/npm/bin/runsema.js" "$out/runsema/bin/runsema.js"
 cp "$root/README.md" "$root/LICENSE" "$out/runsema/"
 
-# <npm cpu>:<go arch>
-for target in x64:amd64 arm64:arm64; do
-    cpu="${target%%:*}"
-    package="runsema-linux-$cpu"
+# <npm os>:<npm cpu>:<go arch>
+for target in linux:x64:amd64 linux:arm64:arm64 darwin:x64:amd64 darwin:arm64:arm64; do
+    os="${target%%:*}"
+    cpu="${target#*:}"
+    cpu="${cpu%%:*}"
+    package="runsema-$os-$cpu"
     mkdir -p "$out/$package/bin"
-    (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH="${target##*:}" \
+    (cd "$root" && CGO_ENABLED=0 GOOS="$os" GOARCH="${target##*:}" \
         go build -trimpath -ldflags='-s -w' -o "$out/$package/bin/runsema" .)
     cp "$root/LICENSE" "$out/$package/"
     cat > "$out/$package/package.json" <<JSON
 {
     "name": "$package",
     "version": "$version",
-    "description": "The linux $cpu binary of runsema.",
+    "description": "The $os $cpu binary of runsema.",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -35,7 +37,7 @@ for target in x64:amd64 arm64:arm64; do
         "bin"
     ],
     "os": [
-        "linux"
+        "$os"
     ],
     "cpu": [
         "$cpu"

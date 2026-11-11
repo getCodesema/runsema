@@ -7,7 +7,7 @@ fixed worker count.
 runsema -- vitest run --maxWorkers={jobs}
 ```
 
-Linux. Go, standard library only, one static binary.
+Linux and macOS. Go, standard library only, one static binary.
 
 ## Why
 
@@ -90,7 +90,7 @@ share slots only when they share this directory.
 - A tool that ignores both `{jobs}` and `RUNSEMA_JOBS` is only delayed, not sized.
 - Slots count CPUs. Memory is seen through pressure only.
 - Without PSI (kernel before 4.20, or PSI disabled) only the slots apply.
-- Linux only: `flock` and PSI.
+- macOS has no PSI: only the slots apply there. No Windows (`flock`).
 
 ## Development
 

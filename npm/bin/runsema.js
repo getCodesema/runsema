@@ -12,7 +12,7 @@ let binary;
 try {
     binary = require.resolve(`${platformPackage}/bin/runsema`);
 } catch {
-    console.error(`runsema: package ${platformPackage} is not installed (runsema needs Linux on x64 or arm64).`);
+    console.error(`runsema: package ${platformPackage} is not installed (runsema runs on Linux and macOS, x64 or arm64).`);
     process.exit(1);
 }
 
