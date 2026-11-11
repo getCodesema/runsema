@@ -32,10 +32,9 @@ jobs:
             # The version is the tag: v0.2.0 publishes 0.2.0.
             - run: sh scripts/build-npm.sh "${GITHUB_REF_NAME#v}"
 
-            # Platform packages first: the launcher depends on them at the same version.
-            - name: Publish the packages
+            - name: Publish the package
               # Empty once the packages trust this workflow (OIDC). Set the NPM_TOKEN secret only to publish
-              # packages that do not exist yet: npm cannot trust a workflow for a package it has never seen.
+              # a package that does not exist yet: npm cannot trust a workflow for a package it has never seen.
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
               run: |
@@ -44,12 +43,9 @@ jobs:
                     *-beta*|*-rc*|*-alpha*) DIST_TAG=next ;;
                     *) DIST_TAG=latest ;;
                   esac
-                  for directory in runsema-linux-x64 runsema-linux-arm64 runsema-darwin-x64 runsema-darwin-arm64 runsema; do
-                    NAME="$(node -p "require('./dist/npm/$directory/package.json').name")"
-                    PUBLISHED="$(npm view "$NAME@$VERSION" version 2>/dev/null || echo none)"
-                    if [ "$VERSION" = "$PUBLISHED" ]; then
-                      echo "$NAME@$VERSION already published, skipping"
-                      continue
-                    fi
-                    (cd "dist/npm/$directory" && npm publish --access public --tag "$DIST_TAG")
-                  done
+                  PUBLISHED="$(npm view "@codesema/runsema@$VERSION" version 2>/dev/null || echo none)"
+                  if [ "$VERSION" = "$PUBLISHED" ]; then
+                    echo "@codesema/runsema@$VERSION already published, skipping"
+                    exit 0
+                  fi
+                  cd dist/npm/runsema && npm publish --access public --tag "$DIST_TAG"

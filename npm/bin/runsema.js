@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
-// Starts the binary of the platform package npm installed next to this one, and gets out of the way:
+// Starts the binary built for this machine, shipped next to this file, and gets out of the way:
 // same arguments, same terminal, same signals, same exit code.
 const { spawn } = require('node:child_process');
+const { existsSync } = require('node:fs');
 const { constants } = require('node:os');
+const { join } = require('node:path');
 
-const platformPackage = `@codesema/runsema-${process.platform}-${process.arch}`;
+const binary = join(__dirname, `runsema-${process.platform}-${process.arch}`);
 
-let binary;
-try {
-    binary = require.resolve(`${platformPackage}/bin/runsema`);
-} catch {
-    console.error(`runsema: package ${platformPackage} is not installed (runsema runs on Linux and macOS, x64 or arm64).`);
+if (!existsSync(binary)) {
+    console.error(`runsema: no binary for ${process.platform} ${process.arch} (runsema runs on Linux and macOS, x64 or arm64).`);
     process.exit(1);
 }
 

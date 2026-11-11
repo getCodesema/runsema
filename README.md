@@ -56,7 +56,8 @@ the run down. On a host all three are machine-wide.
 
 ## Install
 
-With npm, pnpm, yarn or bun (the binary ships in the package, nothing is downloaded at install):
+With npm, pnpm, yarn or bun. One package holds the binary of every platform and starts the one that
+matches the machine, so nothing is downloaded at install and there is no optional dependency to resolve:
 
 ```sh
 npm install --save-dev @codesema/runsema
@@ -125,9 +126,8 @@ sh scripts/smoke-npm.sh
 learned. `main.go` is the flow: gate, slots, reservations, the command, the measure. Each has its test
 file, on temporary directories.
 
-`scripts/build-npm.sh <version>` builds the npm packages into `dist/npm`: the `@codesema/runsema` launcher and one
-package per platform holding the binary. `scripts/smoke-npm.sh` installs them in an empty project and
-runs the command.
+`scripts/build-npm.sh <version>` builds the npm package into `dist/npm/runsema`: the launcher and one
+binary per platform. `scripts/smoke-npm.sh` installs it in an empty project and runs the command.
 
 ## License
 

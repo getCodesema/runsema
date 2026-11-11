@@ -1,7 +1,7 @@
 {
     "name": "@codesema/runsema",
     "version": "0.0.0",
-    "description": "Launcher that sizes a command's parallelism from the CPUs free right now: shared flock slots plus Linux pressure (PSI).",
+    "description": "Launcher that sizes a command's parallelism from the CPUs and memory free right now: shared flock slots, learned memory, Linux pressure (PSI).",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -17,10 +17,8 @@
         "darwin",
         "linux"
     ],
-    "optionalDependencies": {
-        "@codesema/runsema-darwin-arm64": "0.0.0",
-        "@codesema/runsema-darwin-x64": "0.0.0",
-        "@codesema/runsema-linux-arm64": "0.0.0",
-        "@codesema/runsema-linux-x64": "0.0.0"
-    }
+    "cpu": [
+        "arm64",
+        "x64"
+    ]
 }
